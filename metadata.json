@@ -1,0 +1,5 @@
+{
+  "name": "ProtoSense",
+  "description": "A scientific reproducibility analysis tool that converts methods text or PDFs into scored, step-by-step runbooks using Gemini 3 Pro.",
+  "requestFramePermissions": []
+}
