@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Calculator, Clock, AlertTriangle, Beaker, PlayCircle, Bot, Search, Check, X, HelpCircle, Activity } from 'lucide-react';
+import { Calculator, Clock, AlertTriangle, Beaker, PlayCircle, Bot, Search, Check, X, HelpCircle, Activity, BarChart2, Sigma } from 'lucide-react';
 import { ConsistencyCheckResult, DeepAnalysisResult } from '../types';
 
 interface ConsistencyPanelProps {
@@ -11,7 +11,7 @@ interface ConsistencyPanelProps {
 }
 
 export const ConsistencyPanel: React.FC<ConsistencyPanelProps> = ({ data, deepData, isLoading, onRunChecks }) => {
-  const [activeSubTab, setActiveSubTab] = useState<'consistency' | 'simulation' | 'validation'>('consistency');
+  const [activeSubTab, setActiveSubTab] = useState<'consistency' | 'simulation' | 'validation' | 'statistics'>('consistency');
 
   if (!data && !deepData && !isLoading) {
     return (
@@ -21,7 +21,7 @@ export const ConsistencyPanel: React.FC<ConsistencyPanelProps> = ({ data, deepDa
         </div>
         <h2 className="text-xl font-bold text-slate-800 dark:text-slate-200 mb-2">Run Deep Analysis</h2>
         <p className="text-slate-500 dark:text-slate-400 max-w-md mb-8">
-            Perform computational consistency checks, virtual robot simulation, and material search validation.
+            Perform computational consistency checks, virtual robot simulation, statistical critique, and material search validation.
         </p>
         <button
             onClick={onRunChecks}
@@ -43,9 +43,10 @@ export const ConsistencyPanel: React.FC<ConsistencyPanelProps> = ({ data, deepDa
          </div>
          <p className="text-slate-600 dark:text-slate-400 font-medium">Running Agentic Workflow...</p>
          <div className="mt-2 space-y-1 text-xs text-slate-400">
-            <p>• Estimating Timelines (Python)</p>
-            <p>• Simulating Protocol Steps (Gemini Thinking)</p>
+            <p>• Estimating Timelines (Reasoning)</p>
+            <p>• Simulating Protocol Steps</p>
             <p>• Validating Materials (Google Search)</p>
+            <p>• Critiquing Statistics</p>
          </div>
       </div>
     );
@@ -56,7 +57,7 @@ export const ConsistencyPanel: React.FC<ConsistencyPanelProps> = ({ data, deepDa
       
       {/* Sub-navigation */}
       <div className="flex justify-center mb-6">
-        <div className="bg-white dark:bg-slate-900 p-1 rounded-lg border border-slate-200 dark:border-slate-800 flex gap-1">
+        <div className="bg-white dark:bg-slate-900 p-1 rounded-lg border border-slate-200 dark:border-slate-800 flex gap-1 flex-wrap justify-center">
             <button
                 onClick={() => setActiveSubTab('consistency')}
                 className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${activeSubTab === 'consistency' ? 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'}`}
@@ -68,6 +69,12 @@ export const ConsistencyPanel: React.FC<ConsistencyPanelProps> = ({ data, deepDa
                 className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${activeSubTab === 'simulation' ? 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'}`}
             >
                 Virtual Simulation
+            </button>
+            <button
+                onClick={() => setActiveSubTab('statistics')}
+                className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${activeSubTab === 'statistics' ? 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'}`}
+            >
+                Statistician
             </button>
             <button
                 onClick={() => setActiveSubTab('validation')}
@@ -170,7 +177,7 @@ export const ConsistencyPanel: React.FC<ConsistencyPanelProps> = ({ data, deepDa
                     </div>
                     <div>
                          <h3 className="font-bold text-slate-800 dark:text-slate-200">Virtual Robot Simulation</h3>
-                         <p className="text-xs text-slate-500">Gemini 3 Pro "Thinking" Trace</p>
+                         <p className="text-xs text-slate-500">Gemini 2.5 Flash Trace</p>
                     </div>
                 </div>
             </div>
@@ -195,7 +202,7 @@ export const ConsistencyPanel: React.FC<ConsistencyPanelProps> = ({ data, deepDa
                                 <span className="text-sm font-semibold text-slate-800 dark:text-slate-200">{log.action}</span>
                              </div>
                              <div className="text-sm text-slate-600 dark:text-slate-300 font-mono mb-1">
-                                <span className="text-indigo-500">Thinking:</span> {log.simulation_note}
+                                <span className="text-indigo-500">Trace:</span> {log.simulation_note}
                              </div>
                              <div className="text-xs text-slate-400 italic">
                                 State: {log.state_change}
@@ -205,6 +212,48 @@ export const ConsistencyPanel: React.FC<ConsistencyPanelProps> = ({ data, deepDa
                 ))}
             </div>
         </div>
+      )}
+
+      {activeSubTab === 'statistics' && deepData?.statistical_analysis && (
+          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2">
+             <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm p-6">
+                <div className="flex items-center gap-3 mb-4">
+                    <div className="bg-orange-100 dark:bg-orange-900/30 p-2 rounded-lg text-orange-600 dark:text-orange-400">
+                        <BarChart2 className="w-6 h-6" />
+                    </div>
+                    <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200">Statistical Executive Summary</h3>
+                </div>
+                <p className="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">
+                    {deepData.statistical_analysis.summary}
+                </p>
+             </div>
+
+             <div className="grid md:grid-cols-2 gap-6">
+                {deepData.statistical_analysis.findings.map((finding, idx) => (
+                    <div key={idx} className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm p-5 border-l-4 border-l-slate-300 dark:border-l-slate-600 relative overflow-hidden">
+                         <div className={`absolute top-0 right-0 px-3 py-1 text-[10px] font-bold uppercase rounded-bl-lg ${
+                            finding.status === 'Robust' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' :
+                            finding.status === 'Warning' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300' :
+                            finding.status === 'Critical' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300' :
+                            'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
+                         }`}>
+                             {finding.status}
+                         </div>
+                         <h4 className="font-bold text-slate-800 dark:text-slate-200 mb-2 flex items-center gap-2">
+                            <Sigma className="w-4 h-4 text-slate-400" />
+                            {finding.aspect}
+                         </h4>
+                         <p className="text-sm text-slate-600 dark:text-slate-300 mb-3 min-h-[40px]">
+                            {finding.observation}
+                         </p>
+                         <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-lg text-xs text-slate-500 dark:text-slate-400">
+                            <span className="font-bold text-indigo-600 dark:text-indigo-400">Recommendation: </span>
+                            {finding.recommendation}
+                         </div>
+                    </div>
+                ))}
+             </div>
+          </div>
       )}
 
       {activeSubTab === 'validation' && deepData && (

@@ -1,7 +1,8 @@
+
 import React from 'react';
 import { Sparkles, ArrowRight, X } from 'lucide-react';
 
-export type DemoStep = 0 | 1 | 2 | 3 | 4 | 5;
+export type DemoStep = 0 | 1 | 2 | 3 | 4 | 5 | 6;
 
 interface DemoOverlayProps {
   step: DemoStep;
@@ -27,19 +28,25 @@ export const DemoOverlay: React.FC<DemoOverlayProps> = ({ step, onNext, onExit, 
       waiting: false
     },
     {
-      title: "Step 3: Visual Runbook",
+      title: "Step 3: Deep Analysis Agents",
+      capability: "Thinking + Search + Code",
+      description: "Navigate to the Deep Analysis tab. Click 'Start Analysis Agents' to trigger parallel agents for virtual simulation, timeline estimation, and statistical critique.",
+      waiting: false
+    },
+    {
+      title: "Step 4: Visual Runbook",
       capability: "Image Generation (Gemini 3 Pro)",
       description: "Navigate to the Visuals tab. Select 'Pro High-Res' and click 'Generate Infographic' to create a visual summary.",
       waiting: false
     },
     {
-      title: "Step 4: Standards Check",
+      title: "Step 5: Standards Check",
       capability: "Grounding with Google Search",
       description: "Navigate to the Standards tab. Select a guideline (e.g., qPCR Reporting) and click 'Fetch Checklist' to search the web for official requirements, then compare them to your protocol.",
       waiting: false
     },
     {
-      title: "Step 5: Export Report",
+      title: "Step 6: Export Report",
       capability: "Multimodal Handling",
       description: "Click 'Full Report' in the top right to download a combined report containing the analysis, citations, and the generated infographic.",
       waiting: false
@@ -70,7 +77,7 @@ export const DemoOverlay: React.FC<DemoOverlayProps> = ({ step, onNext, onExit, 
 
       <div className="flex items-center justify-between">
         <div className="flex gap-1.5">
-           {[1, 2, 3, 4, 5].map(i => (
+           {[1, 2, 3, 4, 5, 6].map(i => (
              <div key={i} className={`w-2 h-2 rounded-full transition-colors ${i === step ? 'bg-indigo-500' : i < step ? 'bg-indigo-900' : 'bg-slate-700'}`} />
            ))}
         </div>
@@ -84,7 +91,7 @@ export const DemoOverlay: React.FC<DemoOverlayProps> = ({ step, onNext, onExit, 
               : 'bg-white text-slate-900 hover:bg-indigo-50'
             }`}
         >
-          {current.waiting ? 'Processing...' : step === 5 ? 'Finish Demo' : 'Next Step'}
+          {current.waiting ? 'Processing...' : step === 6 ? 'Finish Demo' : 'Next Step'}
           {!current.waiting && <ArrowRight className="w-4 h-4" />}
         </button>
       </div>

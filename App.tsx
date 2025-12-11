@@ -214,16 +214,17 @@ const App: React.FC = () => {
   const handleDemoNext = () => {
     if (demoStep === 2) {
       setDemoStep(3);
-      setActiveTab('visuals');
+      setActiveTab('consistency'); // New step: Deep Analysis
     } else if (demoStep === 3) {
       setDemoStep(4);
-      setActiveTab('standards');
+      setActiveTab('visuals');
     } else if (demoStep === 4) {
       setDemoStep(5);
-      // Stay on standards or go to runbook? Let's stay on standards or go to Scorecard/Runbook
-      // Let's go to runbook as it often connects to the final report.
-      setActiveTab('runbook');
+      setActiveTab('standards');
     } else if (demoStep === 5) {
+      setDemoStep(6);
+      setActiveTab('runbook');
+    } else if (demoStep === 6) {
       setDemoStep(0);
       setIsDemoMode(false);
     }
@@ -359,14 +360,14 @@ ${imageEmbed}
              </button>
              <button
                disabled={!analysisResult}
-               onClick={() => setActiveTab('runbook')}
+               onClick={() => setActiveTab('visuals')}
                className={`px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors ${
-                 activeTab === 'runbook' && analysisResult
+                 activeTab === 'visuals' && analysisResult
                    ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300' 
                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 disabled:opacity-50'
                }`}
              >
-               <ListChecks className="w-4 h-4" /> Runbook
+               <ImageIcon className="w-4 h-4" /> Visuals
              </button>
              <button
                disabled={!analysisResult}
@@ -403,14 +404,14 @@ ${imageEmbed}
              </button>
              <button
                disabled={!analysisResult}
-               onClick={() => setActiveTab('visuals')}
+               onClick={() => setActiveTab('runbook')}
                className={`px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors ${
-                 activeTab === 'visuals' && analysisResult
+                 activeTab === 'runbook' && analysisResult
                    ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300' 
                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 disabled:opacity-50'
                }`}
              >
-               <ImageIcon className="w-4 h-4" /> Visuals
+               <ListChecks className="w-4 h-4" /> Runbook
              </button>
           </div>
 
@@ -512,12 +513,13 @@ ${imageEmbed}
                 <div className="h-full animate-fade-in relative z-10">
                     {activeTab === 'scorecard' && <Scorecard score={reproScore} />}
                     {activeTab === 'issues' && <IssuesList issues={analysisResult.issues} summary={analysisResult.methods_patch_summary} critique={analysisResult.critique} isDemoMode={isDemoMode} />}
-                    {activeTab === 'runbook' && (
-                        <Runbook 
-                            runbook={analysisResult.runbook} 
-                            markdownContent={analysisResult.runbook_markdown} 
-                            onExport={handleExportFullReport}
-                            onUpdate={handleUpdateRunbook}
+                    {activeTab === 'visuals' && (
+                        <VisualsPanel 
+                            runbookMarkdown={analysisResult.runbook_markdown || ''}
+                            scorecard={reproScore}
+                            topIssues={analysisResult.issues}
+                            generatedInfographic={generatedInfographic}
+                            setGeneratedInfographic={setGeneratedInfographic}
                         />
                     )}
                     {activeTab === 'patch' && <MethodsPatch patchMarkdown={analysisResult.patch_markdown} />}
@@ -532,13 +534,12 @@ ${imageEmbed}
                     {activeTab === 'standards' && extractionData && (
                         <StandardsPanel extractionData={extractionData} />
                     )}
-                    {activeTab === 'visuals' && (
-                        <VisualsPanel 
-                            runbookMarkdown={analysisResult.runbook_markdown || ''}
-                            scorecard={reproScore}
-                            topIssues={analysisResult.issues}
-                            generatedInfographic={generatedInfographic}
-                            setGeneratedInfographic={setGeneratedInfographic}
+                    {activeTab === 'runbook' && (
+                        <Runbook 
+                            runbook={analysisResult.runbook} 
+                            markdownContent={analysisResult.runbook_markdown} 
+                            onExport={handleExportFullReport}
+                            onUpdate={handleUpdateRunbook}
                         />
                     )}
                 </div>

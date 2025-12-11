@@ -47,6 +47,19 @@ export interface MaterialValidation {
   search_finding: string;
 }
 
+// --- New Statistical Types ---
+export interface StatisticalFinding {
+  aspect: 'Sample Size (n)' | 'Statistical Test' | 'Replicates' | 'Power Analysis';
+  status: 'Robust' | 'Warning' | 'Critical' | 'Unknown';
+  observation: string;
+  recommendation: string;
+}
+
+export interface StatisticalAnalysisResult {
+  summary: string;
+  findings: StatisticalFinding[];
+}
+
 export interface ConsistencyCheckResult {
   timeline_minutes_estimate: number;
   timeline_explanation: string;
@@ -61,6 +74,7 @@ export interface ConsistencyCheckResult {
 export interface DeepAnalysisResult {
   simulation_logs: SimulationLog[];
   material_validations: MaterialValidation[];
+  statistical_analysis: StatisticalAnalysisResult;
 }
 
 export interface AnalysisResult {

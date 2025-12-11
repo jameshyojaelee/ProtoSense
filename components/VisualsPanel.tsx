@@ -1,3 +1,4 @@
+
 import React, { useState, useRef } from 'react';
 import { Image as ImageIcon, Zap, Star, Download, AlertTriangle, Loader2, PenTool, Upload, X, HelpCircle, Maximize2, Monitor, Smartphone, Square, Send, Wand2 } from 'lucide-react';
 import { generateRunbookInfographic, cleanupSketchToDiagram, editRunbookInfographic } from '../services/geminiService';
@@ -13,6 +14,12 @@ interface VisualsPanelProps {
 }
 
 type AspectRatio = '16:9' | '9:16' | '1:1' | '4:3' | '3:4';
+
+const AspectRatioIcon = ({ ratio }: { ratio: AspectRatio }) => {
+    if (ratio === '16:9') return <Monitor className="w-4 h-4" />;
+    if (ratio === '9:16') return <Smartphone className="w-4 h-4" />;
+    return <Square className="w-4 h-4" />;
+};
 
 export const VisualsPanel: React.FC<VisualsPanelProps> = ({ 
   runbookMarkdown, 
@@ -72,7 +79,17 @@ export const VisualsPanel: React.FC<VisualsPanelProps> = ({
       });
       setGeneratedInfographic(imageBase64);
     } catch (err: any) {
-      setErrorInfographic(err.message || "Failed to generate image.");
+      // Check for API key permissions issues (404 Not Found often means model not accessible/key invalid for model)
+      if (err.message && (err.message.includes("Requested entity was not found") || err.message.includes("404"))) {
+         // Ask user to re-select key
+         setErrorInfographic("Model access failed. Please select a valid paid API key.");
+         const aistudio = (window as any).aistudio;
+         if (aistudio) {
+             await aistudio.openSelectKey();
+         }
+      } else {
+         setErrorInfographic(err.message || "Failed to generate image.");
+      }
     } finally {
       setLoadingInfographic(false);
     }
@@ -105,7 +122,15 @@ export const VisualsPanel: React.FC<VisualsPanelProps> = ({
       setGeneratedInfographic(newImage);
       setFineTunePrompt('');
     } catch (err: any) {
-      setErrorInfographic(err.message || "Failed to edit image.");
+      if (err.message && (err.message.includes("Requested entity was not found") || err.message.includes("404"))) {
+         setErrorInfographic("Model access failed. Please select a valid paid API key.");
+         const aistudio = (window as any).aistudio;
+         if (aistudio) {
+             await aistudio.openSelectKey();
+         }
+      } else {
+         setErrorInfographic(err.message || "Failed to edit image.");
+      }
     } finally {
       setIsFineTuning(false);
     }
@@ -184,12 +209,6 @@ export const VisualsPanel: React.FC<VisualsPanelProps> = ({
       link.click();
       document.body.removeChild(link);
     }
-  };
-
-  const AspectRatioIcon = ({ ratio }: { ratio: AspectRatio }) => {
-    if (ratio === '16:9') return <Monitor className="w-4 h-4" />;
-    if (ratio === '9:16') return <Smartphone className="w-4 h-4" />;
-    return <Square className="w-4 h-4" />;
   };
 
   return (
@@ -382,7 +401,7 @@ export const VisualsPanel: React.FC<VisualsPanelProps> = ({
                       <p className="text-sm">Select quality & aspect ratio, then click Generate.</p>
                       {errorInfographic && (
                         <div className="mt-4 p-3 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 rounded-lg text-sm max-w-sm">
-                          Error: {errorInfographic}
+                          {errorInfographic}
                         </div>
                       )}
                     </>

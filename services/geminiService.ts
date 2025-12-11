@@ -1,13 +1,12 @@
 
 import { GoogleGenAI, Type, Schema, Chat } from "@google/genai";
-import { AnalysisResult, ConsistencyCheckResult, DeepAnalysisResult, ExperimentTemplate, FileInput, Issue, Checklist, ChecklistComparisonResult, StandardCitation, SimulationLog, MaterialValidation } from "../types";
+import { AnalysisResult, ConsistencyCheckResult, DeepAnalysisResult, ExperimentTemplate, FileInput, Issue, Checklist, ChecklistComparisonResult, StandardCitation, SimulationLog, MaterialValidation, StatisticalAnalysisResult } from "../types";
 import { ProtocolExtraction, ReproScore, ReproducibilityCritique } from "../types/protocol";
 
 // Helper to get a fresh client (important for dynamic API key updates in AI Studio)
 const getAiClient = () => new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-// Initialize default client for static calls
-const ai = getAiClient();
+let chatSession: Chat | null = null;
 
 // Schema Definition for Analysis
 const analysisSchema: Schema = {
@@ -359,11 +358,66 @@ const validationSchema: Schema = {
   required: ["material_validations"]
 };
 
+const statisticalSchema: Schema = {
+  type: Type.OBJECT,
+  properties: {
+    summary: { type: Type.STRING, description: "Executive summary of statistical rigor." },
+    findings: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          aspect: { type: Type.STRING, enum: ["Sample Size (n)", "Statistical Test", "Replicates", "Power Analysis"] },
+          status: { type: Type.STRING, enum: ["Robust", "Warning", "Critical", "Unknown"] },
+          observation: { type: Type.STRING, description: "What was found in the text." },
+          recommendation: { type: Type.STRING, description: "How to fix the statistical flaw." }
+        },
+        required: ["aspect", "status", "observation", "recommendation"]
+      }
+    }
+  },
+  required: ["summary", "findings"]
+};
+
+// Schema for checklist fetching
+const checklistSchema: Schema = {
+  type: Type.OBJECT,
+  properties: {
+    checklistName: { type: Type.STRING },
+    items: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          id: { type: Type.STRING },
+          requirement: { type: Type.STRING },
+          whyItMatters: { type: Type.STRING },
+          severity: { type: Type.STRING, enum: ["Essential", "Recommended"] }
+        },
+        required: ["id", "requirement", "whyItMatters", "severity"]
+      }
+    },
+    citations: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          uri: { type: Type.STRING },
+          title: { type: Type.STRING }
+        },
+        required: ["uri", "title"]
+      }
+    }
+  },
+  required: ["checklistName", "items", "citations"]
+};
+
 
 export const analyzeProtocol = async (
   input: FileInput,
   template: ExperimentTemplate
 ): Promise<AnalysisResult> => {
+  const ai = getAiClient();
   const modelId = "gemini-3-pro-preview";
 
   const promptText = `
@@ -403,7 +457,6 @@ export const analyzeProtocol = async (
         responseMimeType: "application/json",
         responseSchema: analysisSchema,
         temperature: 0.1, // Deterministic
-        thinkingConfig: { thinkingBudget: 1024 } 
       }
     });
 
@@ -447,6 +500,7 @@ export const extractProtocol = async ({
   pastedText: string,
   template: string
 }): Promise<ProtocolExtraction> => {
+  const ai = getAiClient();
   try {
     const parts = [];
 
@@ -492,7 +546,6 @@ export const extractProtocol = async ({
         responseMimeType: "application/json",
         responseSchema: extractionSchema,
         temperature: 0.1, // Deterministic
-        thinkingConfig: { thinkingBudget: 2048 } 
       }
     });
 
@@ -516,6 +569,7 @@ export const critiqueReproducibility = async ({
   extractionJson: ProtocolExtraction;
   reproScore: ReproScore;
 }): Promise<ReproducibilityCritique> => {
+  const ai = getAiClient();
   const modelId = "gemini-3-pro-preview";
   
   const promptText = `
@@ -562,6 +616,7 @@ export const generateRunbook = async ({
   template: string;
   extractionJson: ProtocolExtraction;
 }): Promise<{ runbook_markdown: string }> => {
+  const ai = getAiClient();
   const modelId = "gemini-3-pro-preview";
 
   const promptText = `
@@ -615,6 +670,7 @@ export const generateMethodsPatch = async ({
   extractionJson: ProtocolExtraction;
   critique: ReproducibilityCritique;
 }): Promise<{ patch_markdown: string }> => {
+  const ai = getAiClient();
   const modelId = "gemini-3-pro-preview";
   const promptText = `
     Write suggested Methods text to improve reproducibility based on the extraction and critique.
@@ -655,18 +711,24 @@ export const runConsistencyChecks = async ({
 }: {
   extractionJson: ProtocolExtraction
 }): Promise<ConsistencyCheckResult> => {
-  const modelId = "gemini-2.5-flash"; // Using 2.5 Flash for code execution tasks as it is robust for tools
+  const ai = getAiClient();
+  const modelId = "gemini-2.5-flash"; // Reliable reasoning model
   const promptText = `
     You are a computational biologist.
     Here is a structured protocol extraction: ${JSON.stringify(extractionJson)}
     
-    Write and execute Python code to:
+    Perform the following calculations and checks mentally:
     1. Estimate total time in minutes by parsing 'time' parameters in the 'steps' array (convert '1 hr' to 60, 'overnight' to 960, etc.). Sum them up. Return 0 if no time info is found.
     2. Check for unit inconsistencies (e.g. uL vs ml mixed without logic, or mass vs volume ambiguity) in parameters.
     3. Identify steps that mention a concentration parameter where a dilution calculation might be needed (e.g. "Add 50 ug/mL X to Y"). If a dilution seems implied, calculate an example volume (assume 100uL total volume if unknown).
 
-    Your code should print the result in JSON format.
-    Finally, return a JSON response matching the schema.
+    Return a valid JSON response strictly matching this schema:
+    {
+      "timeline_minutes_estimate": number,
+      "timeline_explanation": string,
+      "flagged_inconsistencies": string[],
+      "computed_dilutions": [{"reagent": string, "calculation": string, "instruction": string}]
+    }
   `;
 
   try {
@@ -676,7 +738,6 @@ export const runConsistencyChecks = async ({
       config: {
         responseMimeType: "application/json",
         responseSchema: consistencySchema,
-        tools: [{ codeExecution: {} }],
         temperature: 0.1, // Deterministic
       }
     });
@@ -697,7 +758,8 @@ export const runVirtualSimulation = async ({
 }: {
   extractionJson: ProtocolExtraction
 }): Promise<SimulationLog[]> => {
-  const modelId = "gemini-3-pro-preview";
+  const ai = getAiClient();
+  const modelId = "gemini-2.5-flash";
   
   const promptText = `
     Act as a "Virtual Laboratory Robot". You are attempting to physically execute this protocol based ONLY on the provided JSON.
@@ -709,7 +771,7 @@ export const runVirtualSimulation = async ({
     For each step, simulate the physical action.
     - If a volume is missing, you cannot proceed safely -> Log "Critical Failure" or "Warning".
     - If a container type is not specified (e.g. "Transfer to tube" but doesn't say 1.5ml or 15ml), Log "Warning".
-    - If logic flows correctly, Log "Success" and update the state (e.g. "Sample is now a pellet").
+    - If logic flows correctly, Log "Success" and update the state (e.g. "Sample is now in pellet").
     - If there is a "ghost step" (e.g. discard supernatant, but next step analyzes supernatant), Log "Critical Failure".
 
     Output a JSON list of logs.
@@ -723,7 +785,6 @@ export const runVirtualSimulation = async ({
         responseMimeType: "application/json",
         responseSchema: simulationSchema,
         temperature: 0.1,
-        thinkingConfig: { thinkingBudget: 2048 } // Use thinking for deep simulation
       }
     });
 
@@ -742,6 +803,7 @@ export const validateMaterials = async ({
 }: {
   extractionJson: ProtocolExtraction
 }): Promise<MaterialValidation[]> => {
+  const ai = getAiClient();
   const modelId = "gemini-3-pro-preview";
   
   const materialsToCheck = extractionJson.materials.filter(m => m.category === 'reagent' || m.category === 'equipment');
@@ -792,20 +854,95 @@ export const validateMaterials = async ({
   }
 };
 
+export const runStatisticalAnalysis = async ({
+  extractionJson
+}: {
+  extractionJson: ProtocolExtraction
+}): Promise<StatisticalAnalysisResult> => {
+  const ai = getAiClient();
+  const modelId = "gemini-2.5-flash";
+
+  const promptText = `
+    Act as a Senior Biostatistician. Review this protocol for statistical rigor.
+    
+    Focus Areas:
+    1. Sample Size (n): Is it explicitly stated? Is it sufficient?
+    2. Statistical Tests: Are specific tests (t-test, ANOVA) named? Are they appropriate for the described experiment design?
+    3. Replicates: Does it distinguish between technical replicates (same tube) vs biological replicates (different animals/cultures)?
+    4. Power Analysis: Is there any mention of power calculation?
+
+    Protocol Data:
+    Controls/Replicates: ${JSON.stringify(extractionJson.controls_and_replicates)}
+    Analysis Section: ${JSON.stringify(extractionJson.analysis)}
+    Steps: ${JSON.stringify(extractionJson.steps)}
+    
+    Output strictly in JSON.
+  `;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: modelId,
+      contents: { parts: [{ text: promptText }] },
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: statisticalSchema,
+        temperature: 0.1,
+      }
+    });
+
+    const text = response.text;
+    if (!text) throw new Error("No response from statistical analysis model");
+    return JSON.parse(text) as StatisticalAnalysisResult;
+
+  } catch (error: any) {
+    console.error("Statistical Analysis Failed:", error);
+    throw new Error("Failed to run statistical analysis.");
+  }
+};
+
 export const runDeepAnalysis = async ({
   extractionJson
 }: {
   extractionJson: ProtocolExtraction
 }): Promise<DeepAnalysisResult> => {
-  // Run agents in parallel
-  const [simulationLogs, materialValidations] = await Promise.all([
-    runVirtualSimulation({ extractionJson }),
-    validateMaterials({ extractionJson })
-  ]);
+  // Run agents sequentially to avoid rate limits and improve stability during demo
+  
+  let simulationLogs: SimulationLog[] = [];
+  try {
+    simulationLogs = await runVirtualSimulation({ extractionJson });
+  } catch (e) {
+    console.warn("Virtual Simulation Agent failed:", e);
+    // Add a fallback error log for UI
+    simulationLogs = [{
+       stepId: 0,
+       action: "Agent Error",
+       status: "Critical Failure",
+       simulation_note: "The virtual simulation agent encountered an error or timeout.",
+       state_change: "Unknown"
+    }];
+  }
+
+  let materialValidations: MaterialValidation[] = [];
+  try {
+    materialValidations = await validateMaterials({ extractionJson });
+  } catch (e) {
+    console.warn("Material Validation Agent failed:", e);
+  }
+
+  let statisticalAnalysis: StatisticalAnalysisResult = { 
+     summary: "Statistical analysis agent encountered an error.", 
+     findings: [] 
+  };
+  try {
+    statisticalAnalysis = await runStatisticalAnalysis({ extractionJson });
+  } catch (e) {
+    console.warn("Statistical Analysis Agent failed:", e);
+  }
 
   return {
     simulation_logs: simulationLogs,
-    material_validations: materialValidations
+    material_validations: materialValidations,
+    statistical_analysis: statisticalAnalysis
   };
 };
 
@@ -961,6 +1098,7 @@ export const cleanupSketchToDiagram = async ({
   mimeType: string;
   userIntent?: string;
 }): Promise<{ cleanedDiagramPng: string; questions: string[] }> => {
+  const ai = getAiClient();
   const modelId = "gemini-2.5-flash-image";
   
   const promptText = `
@@ -1033,170 +1171,105 @@ export const cleanupSketchToDiagram = async ({
   }
 };
 
-// --- Standards & Benchmarking ---
+export const initializeChat = async (input: FileInput): Promise<void> => {
+  const ai = getAiClient();
+  const modelId = "gemini-2.5-flash";
+  
+  // Basic system instruction
+  const systemInstruction = `You are ProtoSense, an expert scientific reproducibility assistant. 
+  You help scientists refine their methods sections. 
+  You have access to the user's uploaded protocol. Answer questions about it, clarify ambiguities, and explain scientific standards.
+  Be concise, professional, and helpful.`;
 
-export const fetchReportingChecklist = async ({ guidelineType }: { guidelineType: string }): Promise<Checklist> => {
-  const modelId = "gemini-3-pro-preview";
-  // We cannot use responseSchema with Google Search, so we instruct the model to return JSON in text.
-  const promptText = `
-    You are a scientific standards expert.
-    Search for the reporting guidelines for "${guidelineType}" (e.g. MIQE for qPCR, ARRIVE for animals, CONSORT for trials, etc).
-    
-    Goal: Create a structured checklist of requirements from this guideline.
-    
-    Output strictly in valid JSON format (do not use Markdown code blocks).
-    Structure:
-    {
-      "checklistName": "Official name of guideline",
-      "items": [
-        {
-          "id": "1a",
-          "requirement": "Description of requirement",
-          "whyItMatters": "Brief rationale",
-          "severity": "Essential" | "Recommended"
-        }
-      ]
+  chatSession = ai.chats.create({
+    model: modelId,
+    config: {
+      systemInstruction,
     }
-  `;
+  });
 
-  try {
-    const response = await ai.models.generateContent({
-      model: modelId,
-      contents: { parts: [{ text: promptText }] },
-      config: {
-        tools: [{ googleSearch: {} }]
-      }
-    });
-
-    // Extract JSON from text (it might be wrapped in ```json ... ``` or just raw text)
-    let jsonText = response.text || "";
-    jsonText = jsonText.replace(/```json/g, '').replace(/```/g, '').trim();
-    
-    const checklist = JSON.parse(jsonText);
-
-    // Extract citations from grounding metadata
-    const citations: StandardCitation[] = [];
-    const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
-    
-    if (groundingChunks) {
-      groundingChunks.forEach((chunk: any) => {
-        if (chunk.web && chunk.web.uri) {
-          citations.push({
-            uri: chunk.web.uri,
-            title: chunk.web.title || "Web Source"
-          });
+  const parts = [];
+  if (input.type === 'pdf') {
+      parts.push({
+        inlineData: {
+          mimeType: 'application/pdf',
+          data: input.content
         }
       });
-    }
-
-    return {
-      ...checklist,
-      citations
-    } as Checklist;
-
-  } catch (error: any) {
-    console.error("Fetch Checklist Failed:", error);
-    throw new Error("Failed to fetch checklist. Please try again.");
+      parts.push({ text: "Here is the protocol PDF I am working on." });
+  } else {
+      parts.push({ text: `Here is the protocol text:\n${input.content}` });
   }
+
+  // Send the initial document
+  await chatSession.sendMessage({ message: parts });
 };
 
-export const compareProtocolToChecklist = async ({ 
-  checklistJson, 
-  extractionJson 
-}: { 
-  checklistJson: Checklist, 
-  extractionJson: ProtocolExtraction 
-}): Promise<ChecklistComparisonResult> => {
-  const modelId = "gemini-3-pro-preview";
-  
-  const promptText = `
-    Compare the following scientific protocol extraction against the reporting checklist.
-    
-    Checklist:
-    ${JSON.stringify(checklistJson)}
-    
-    Protocol Extraction:
-    ${JSON.stringify(extractionJson)}
-    
-    For each item in the checklist, determine if it is "Covered", "Partial", or "Missing" in the protocol.
-    Provide evidence quotes if covered, or fix suggestions if missing.
-  `;
+export const sendMessageToChat = async (message: string): Promise<string> => {
+  if (!chatSession) throw new Error("Chat not initialized");
+  const result = await chatSession.sendMessage({ message });
+  return result.text;
+};
 
-  try {
+export const updateChatWithExtraction = async (extraction: ProtocolExtraction): Promise<void> => {
+  if (!chatSession) return;
+  const prompt = `Here is the structured extraction of the protocol data. Use this to understand specific details like missing fields, steps, and materials:\n${JSON.stringify(extraction)}`;
+  await chatSession.sendMessage({ message: prompt });
+};
+
+export const fetchReportingChecklist = async ({ guidelineType }: { guidelineType: string }): Promise<Checklist> => {
+    const ai = getAiClient();
+    const modelId = "gemini-3-pro-preview";
+    const prompt = `
+      Find the official reporting checklist guidelines for: ${guidelineType}.
+      Examples include MIQE for qPCR, ARRIVE for animal studies, etc.
+      
+      Extract the key requirements into a structured checklist.
+      Include citations to the official publication or website.
+    `;
+    
     const response = await ai.models.generateContent({
       model: modelId,
-      contents: { parts: [{ text: promptText }] },
+      contents: prompt,
       config: {
+        tools: [{ googleSearch: {} }],
         responseMimeType: "application/json",
-        responseSchema: comparisonSchema,
-        temperature: 0.1
+        responseSchema: checklistSchema,
       }
     });
 
     const text = response.text;
-    if (!text) throw new Error("No response from comparison model");
-    return JSON.parse(text) as ChecklistComparisonResult;
-  } catch (error: any) {
-    console.error("Checklist Comparison Failed:", error);
-    throw new Error("Failed to compare protocol.");
-  }
+    if (!text) throw new Error("No response");
+    return JSON.parse(text) as Checklist;
 };
 
-let currentChat: Chat | null = null;
-
-export const initializeChat = (input: FileInput) => {
-  const modelId = "gemini-3-pro-preview";
-  
-  const systemInstruction = `
-    You are a helpful lab assistant. 
-    You have access to a specific scientific protocol provided by the user.
+export const compareProtocolToChecklist = async ({ checklistJson, extractionJson }: { checklistJson: Checklist, extractionJson: ProtocolExtraction }): Promise<ChecklistComparisonResult> => {
+    const ai = getAiClient();
+    const modelId = "gemini-3-pro-preview";
+    const prompt = `
+      Compare the provided Protocol Extraction against the Reporting Checklist.
+      
+      Checklist: ${JSON.stringify(checklistJson)}
+      Protocol: ${JSON.stringify(extractionJson)}
+      
+      For each checklist item, determine if the protocol covers it.
+      - Covered: Explicitly mentioned.
+      - Partial: Vaguely mentioned.
+      - Missing: Not found.
+      
+      Provide evidence quotes or fix suggestions.
+    `;
     
-    Rules:
-    - Answer questions ONLY based on the provided protocol content and the structured data extracted from it.
-    - If the answer is not in the protocol, state clearly that it is missing from the provided text.
-    - Do not hallucinate steps or reagents not mentioned.
-    - CITATION RULE: When asserting facts from the protocol, you MUST provide a short quote or reference the specific section (e.g. "Section 2.1" or "Step 3").
-    - Be concise and helpful.
-  `;
-
-  currentChat = ai.chats.create({
-    model: modelId,
-    config: { systemInstruction }
-  });
-
-  // Pre-load context into the chat history essentially by sending a message that sets the context, 
-  // but we want this to be invisible or system-level. 
-  // We will send the document as the first message "Here is the protocol context".
-  
-  const parts = [];
-   if (input.type === 'pdf') {
-    parts.push({
-      inlineData: {
-        mimeType: 'application/pdf',
-        data: input.content
+    const response = await ai.models.generateContent({
+      model: modelId,
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: comparisonSchema, 
       }
     });
-  } else {
-    parts.push({ text: input.content });
-  }
-  parts.push({ text: "Here is the protocol context. Please acknowledge you have read it." });
 
-  return currentChat.sendMessage({ message: parts });
-};
-
-export const updateChatWithExtraction = async (extraction: ProtocolExtraction) => {
-  if (!currentChat) return;
-  
-  // Feed the structured extraction as a system-like message to improve reasoning
-  await currentChat.sendMessage({
-    message: `System Update: Here is the structured extraction of the protocol for your reference to help answer user questions more accurately:\n${JSON.stringify(extraction)}`
-  });
-};
-
-export const sendMessageToChat = async (message: string): Promise<string> => {
-  if (!currentChat) {
-    throw new Error("Chat not initialized. Please upload a protocol first.");
-  }
-  const result = await currentChat.sendMessage({ message });
-  return result.text || "I couldn't generate a response.";
+    const text = response.text;
+    if (!text) throw new Error("No response");
+    return JSON.parse(text) as ChecklistComparisonResult;
 };
