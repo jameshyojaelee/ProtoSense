@@ -1,5 +1,6 @@
+
 import { GoogleGenAI, Type, Schema, Chat } from "@google/genai";
-import { AnalysisResult, ConsistencyCheckResult, ExperimentTemplate, FileInput, Issue, Checklist, ChecklistComparisonResult, StandardCitation } from "../types";
+import { AnalysisResult, ConsistencyCheckResult, DeepAnalysisResult, ExperimentTemplate, FileInput, Issue, Checklist, ChecklistComparisonResult, StandardCitation, SimulationLog, MaterialValidation } from "../types";
 import { ProtocolExtraction, ReproScore, ReproducibilityCritique } from "../types/protocol";
 
 // Helper to get a fresh client (important for dynamic API key updates in AI Studio)
@@ -315,6 +316,49 @@ const comparisonSchema: Schema = {
   },
   required: ["checklistName", "items"]
 };
+
+// --- Deep Analysis Schemas ---
+const simulationSchema: Schema = {
+  type: Type.OBJECT,
+  properties: {
+    simulation_logs: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          stepId: { type: Type.INTEGER },
+          action: { type: Type.STRING },
+          status: { type: Type.STRING, enum: ["Success", "Warning", "Critical Failure"] },
+          simulation_note: { type: Type.STRING, description: "The robot's thought process or error log." },
+          state_change: { type: Type.STRING, description: "What happened to the sample? e.g. 'Sample is now in pellet form'." }
+        },
+        required: ["stepId", "action", "status", "simulation_note", "state_change"]
+      }
+    }
+  },
+  required: ["simulation_logs"]
+};
+
+const validationSchema: Schema = {
+  type: Type.OBJECT,
+  properties: {
+    material_validations: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          material_name: { type: Type.STRING },
+          catalog_number: { type: Type.STRING, nullable: true },
+          status: { type: Type.STRING, enum: ["Verified", "Not Found", "Discontinued", "Ambiguous"] },
+          search_finding: { type: Type.STRING, description: "Summary of Google Search result." }
+        },
+        required: ["material_name", "status", "search_finding"]
+      }
+    }
+  },
+  required: ["material_validations"]
+};
+
 
 export const analyzeProtocol = async (
   input: FileInput,
@@ -645,6 +689,128 @@ export const runConsistencyChecks = async ({
     throw new Error("Failed to run consistency checks.");
   }
 };
+
+// --- New Agentic Workflows ---
+
+export const runVirtualSimulation = async ({
+  extractionJson
+}: {
+  extractionJson: ProtocolExtraction
+}): Promise<SimulationLog[]> => {
+  const modelId = "gemini-3-pro-preview";
+  
+  const promptText = `
+    Act as a "Virtual Laboratory Robot". You are attempting to physically execute this protocol based ONLY on the provided JSON.
+    
+    Protocol: ${JSON.stringify(extractionJson)}
+    
+    Task:
+    Go through the steps 1 by 1.
+    For each step, simulate the physical action.
+    - If a volume is missing, you cannot proceed safely -> Log "Critical Failure" or "Warning".
+    - If a container type is not specified (e.g. "Transfer to tube" but doesn't say 1.5ml or 15ml), Log "Warning".
+    - If logic flows correctly, Log "Success" and update the state (e.g. "Sample is now a pellet").
+    - If there is a "ghost step" (e.g. discard supernatant, but next step analyzes supernatant), Log "Critical Failure".
+
+    Output a JSON list of logs.
+  `;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: modelId,
+      contents: { parts: [{ text: promptText }] },
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: simulationSchema,
+        temperature: 0.1,
+        thinkingConfig: { thinkingBudget: 2048 } // Use thinking for deep simulation
+      }
+    });
+
+    const text = response.text;
+    if (!text) throw new Error("No response from simulation model");
+    const result = JSON.parse(text);
+    return result.simulation_logs;
+  } catch (error: any) {
+    console.error("Virtual Simulation Failed:", error);
+    throw new Error("Failed to run virtual simulation.");
+  }
+};
+
+export const validateMaterials = async ({
+  extractionJson
+}: {
+  extractionJson: ProtocolExtraction
+}): Promise<MaterialValidation[]> => {
+  const modelId = "gemini-3-pro-preview";
+  
+  const materialsToCheck = extractionJson.materials.filter(m => m.category === 'reagent' || m.category === 'equipment');
+  const materialsList = materialsToCheck.map(m => `${m.name} ${m.vendor ? `(${m.vendor})` : ''} ${m.identifier ? `[ID: ${m.identifier}]` : ''}`).join('\n');
+
+  if (materialsToCheck.length === 0) return [];
+
+  const promptText = `
+    You are a Procurement Specialist. Validate these scientific materials.
+    
+    Materials:
+    ${materialsList}
+    
+    Task:
+    Search for each item.
+    - Does the vendor exist?
+    - Does the product/catalog number exist?
+    - Is it discontinued?
+    
+    Return a structured validation list.
+  `;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: modelId,
+      contents: { parts: [{ text: promptText }] },
+      config: {
+        responseSchema: validationSchema, // Using schema with tool use is tricky, usually we let it return text then parse, but Gemini 3 supports schema + search well.
+        tools: [{ googleSearch: {} }],
+        responseMimeType: "application/json"
+      }
+    });
+    
+    // Sometimes Google Search tool + JSON schema can be finicky. 
+    // If it fails to return strict JSON, we might need a fallback, but Gemini 3 Pro is usually good.
+    const text = response.text;
+    if (!text) throw new Error("No response from material validation");
+    
+    // Clean potential markdown blocks
+    const cleanText = text.replace(/```json/g, '').replace(/```/g, '').trim();
+    const result = JSON.parse(cleanText);
+    return result.material_validations;
+
+  } catch (error: any) {
+    console.error("Material Validation Failed:", error);
+    // Return empty list rather than crashing, as search might quota limit
+    return [];
+  }
+};
+
+export const runDeepAnalysis = async ({
+  extractionJson
+}: {
+  extractionJson: ProtocolExtraction
+}): Promise<DeepAnalysisResult> => {
+  // Run agents in parallel
+  const [simulationLogs, materialValidations] = await Promise.all([
+    runVirtualSimulation({ extractionJson }),
+    validateMaterials({ extractionJson })
+  ]);
+
+  return {
+    simulation_logs: simulationLogs,
+    material_validations: materialValidations
+  };
+};
+
+
+// --- Visual Generation ---
 
 export const generateRunbookInfographic = async ({
   runbookMarkdown,

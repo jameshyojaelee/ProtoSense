@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { Scorecard } from './components/Scorecard';
@@ -11,7 +12,7 @@ import { ChatPanel } from './components/ChatPanel';
 import { AnalysisProgress, AnalysisStep } from './components/AnalysisProgress';
 import { AboutModal } from './components/AboutModal';
 import { DemoOverlay, DemoStep } from './components/DemoOverlay';
-import { extractProtocol, initializeChat, critiqueReproducibility, generateRunbook, generateMethodsPatch, updateChatWithExtraction, runConsistencyChecks } from './services/geminiService';
+import { extractProtocol, initializeChat, critiqueReproducibility, generateRunbook, generateMethodsPatch, updateChatWithExtraction, runConsistencyChecks, runDeepAnalysis } from './services/geminiService';
 import { calculateReproScore } from './src/scoring/reproScore';
 import { AnalysisResult, ExperimentTemplate, FileInput, Issue, RunbookStep, Severity } from './types';
 import { ProtocolExtraction, ReproScore } from './types/protocol';
@@ -232,8 +233,17 @@ const App: React.FC = () => {
     if (!extractionData || !analysisResult) return;
     setIsCheckingConsistency(true);
     try {
-        const checkResult = await runConsistencyChecks({ extractionJson: extractionData });
-        setAnalysisResult(prev => prev ? ({ ...prev, consistency_check: checkResult }) : null);
+        // Run parallel checks
+        const [consistencyRes, deepRes] = await Promise.all([
+          runConsistencyChecks({ extractionJson: extractionData }),
+          runDeepAnalysis({ extractionJson: extractionData })
+        ]);
+        
+        setAnalysisResult(prev => prev ? ({ 
+          ...prev, 
+          consistency_check: consistencyRes,
+          deep_analysis: deepRes
+        }) : null);
     } catch (err) {
         console.error("Consistency Check Error:", err);
     } finally {
@@ -378,7 +388,7 @@ ${imageEmbed}
                    : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 disabled:opacity-50'
                }`}
              >
-               <Calculator className="w-4 h-4" /> Consistency
+               <Calculator className="w-4 h-4" /> Deep Analysis
              </button>
              <button
                disabled={!analysisResult}
@@ -513,7 +523,8 @@ ${imageEmbed}
                     {activeTab === 'patch' && <MethodsPatch patchMarkdown={analysisResult.patch_markdown} />}
                     {activeTab === 'consistency' && (
                         <ConsistencyPanel 
-                            data={analysisResult.consistency_check} 
+                            data={analysisResult.consistency_check}
+                            deepData={analysisResult.deep_analysis} 
                             isLoading={isCheckingConsistency}
                             onRunChecks={handleRunConsistencyChecks}
                         />

@@ -1,3 +1,4 @@
+
 import { ReproducibilityCritique } from "./types/protocol";
 
 export enum ExperimentTemplate {
@@ -31,6 +32,21 @@ export interface RunbookStep {
   reagents_needed: string[];
 }
 
+export interface SimulationLog {
+  stepId: number;
+  action: string;
+  status: 'Success' | 'Warning' | 'Critical Failure';
+  simulation_note: string; // The "thought process" of the robot
+  state_change: string; // e.g. "Pellet is now suspended"
+}
+
+export interface MaterialValidation {
+  material_name: string;
+  catalog_number: string | null;
+  status: 'Verified' | 'Not Found' | 'Discontinued' | 'Ambiguous';
+  search_finding: string;
+}
+
 export interface ConsistencyCheckResult {
   timeline_minutes_estimate: number;
   timeline_explanation: string;
@@ -40,6 +56,11 @@ export interface ConsistencyCheckResult {
     calculation: string;
     instruction: string;
   }>;
+}
+
+export interface DeepAnalysisResult {
+  simulation_logs: SimulationLog[];
+  material_validations: MaterialValidation[];
 }
 
 export interface AnalysisResult {
@@ -52,6 +73,7 @@ export interface AnalysisResult {
   runbook_markdown?: string;
   patch_markdown?: string;
   consistency_check?: ConsistencyCheckResult;
+  deep_analysis?: DeepAnalysisResult;
 }
 
 export interface FileInput {
