@@ -15,7 +15,7 @@ import { extractProtocol, initializeChat, critiqueReproducibility, generateRunbo
 import { calculateReproScore } from './src/scoring/reproScore';
 import { AnalysisResult, ExperimentTemplate, FileInput, Issue, RunbookStep, Severity } from './types';
 import { ProtocolExtraction, ReproScore } from './types/protocol';
-import { MessageCircle, FileDown, LayoutDashboard, AlertCircle, ListChecks, GitPullRequest, Calculator, Download, Image as ImageIcon, ShieldCheck, Sun, Moon } from 'lucide-react';
+import { MessageCircle, FileDown, LayoutDashboard, AlertCircle, ListChecks, GitPullRequest, Calculator, Download, Image as ImageIcon, ShieldCheck, Sun, Moon, Sparkles, Dna, Microscope, Binary, FileText, FlaskConical } from 'lucide-react';
 
 const DEMO_PROTOCOL = `
 # Cell Culture and Transfection Protocol (Demo)
@@ -436,12 +436,51 @@ ${imageEmbed}
         {/* Main Content Area */}
         <main className="flex-1 overflow-y-auto relative p-6 bg-slate-50 dark:bg-slate-950 transition-colors">
             {!analysisResult && !isAnalyzing && !error && (
-                <div className="h-full flex flex-col items-center justify-center text-slate-400 dark:text-slate-500">
-                    <FileDown className="w-24 h-24 mb-6 opacity-20" />
-                    <h2 className="text-xl font-medium text-slate-600 dark:text-slate-300 mb-2">Ready to Analyze</h2>
-                    <p className="text-sm max-w-md text-center text-slate-500 dark:text-slate-400">
-                        Upload a PDF protocol or paste your methods section to generate a reproducibility scorecard and runbook.
-                    </p>
+                <div className="h-full flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 relative overflow-hidden">
+                    {/* Abstract Background Animation */}
+                    <div className="absolute inset-0 flex items-center justify-center overflow-hidden pointer-events-none opacity-30 dark:opacity-40">
+                       <div className="relative w-full max-w-lg">
+                          {/* Background Blobs */}
+                          <div className="absolute top-0 -left-4 w-72 h-72 bg-purple-300 dark:bg-purple-900 rounded-full mix-blend-multiply dark:mix-blend-screen filter blur-3xl opacity-70 animate-blob"></div>
+                          <div className="absolute top-0 -right-4 w-72 h-72 bg-yellow-300 dark:bg-indigo-900 rounded-full mix-blend-multiply dark:mix-blend-screen filter blur-3xl opacity-70 animate-blob animation-delay-2000"></div>
+                          <div className="absolute -bottom-8 left-20 w-72 h-72 bg-pink-300 dark:bg-blue-900 rounded-full mix-blend-multiply dark:mix-blend-screen filter blur-3xl opacity-70 animate-blob animation-delay-4000"></div>
+                       </div>
+                    </div>
+                    
+                    {/* Floating Particles/Icons */}
+                    <div className="absolute inset-0 overflow-hidden pointer-events-none">
+                       <div className="absolute top-[20%] left-[15%] opacity-20 dark:opacity-30 animate-float text-indigo-400">
+                          <Dna className="w-12 h-12" />
+                       </div>
+                       <div className="absolute top-[60%] right-[15%] opacity-20 dark:opacity-30 animate-float-delayed text-purple-400">
+                          <Microscope className="w-16 h-16" />
+                       </div>
+                       <div className="absolute bottom-[20%] left-[25%] opacity-10 dark:opacity-20 animate-float text-blue-400 animation-delay-1000">
+                          <Binary className="w-8 h-8" />
+                       </div>
+                       <div className="absolute top-[15%] right-[25%] opacity-10 dark:opacity-20 animate-float-delayed text-emerald-400 animation-delay-3000">
+                          <FlaskConical className="w-10 h-10" />
+                       </div>
+                       
+                       {/* Geometric shapes */}
+                       <div className="absolute top-[40%] left-[10%] w-4 h-4 border border-indigo-500 rounded-full opacity-20 animate-float-delayed"></div>
+                       <div className="absolute bottom-[30%] right-[10%] w-6 h-6 border border-purple-500 rotate-45 opacity-20 animate-float"></div>
+                       <div className="absolute top-[80%] left-[40%] w-3 h-3 bg-blue-500 rounded-full opacity-10 animate-float animation-delay-2000"></div>
+                    </div>
+
+                    <div className="relative z-10 flex flex-col items-center justify-center">
+                      <div className="relative">
+                        <div className="absolute -inset-1 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-full opacity-20 blur-md animate-pulse-slow"></div>
+                        <div className="relative bg-white dark:bg-slate-900 p-6 rounded-full mb-6 border border-slate-100 dark:border-slate-800 shadow-sm">
+                           <Sparkles className="w-12 h-12 text-indigo-500 dark:text-indigo-400" />
+                        </div>
+                      </div>
+                      
+                      <h2 className="text-2xl font-bold text-slate-700 dark:text-slate-200 mb-3 tracking-tight">Ready to Analyze</h2>
+                      <p className="text-sm max-w-md text-center text-slate-500 dark:text-slate-400 leading-relaxed">
+                          ProtoSense uses advanced reasoning to audit your scientific methods. Upload a PDF to begin the reproducibility check.
+                      </p>
+                    </div>
                 </div>
             )}
 
@@ -460,7 +499,7 @@ ${imageEmbed}
             )}
 
             {analysisResult && reproScore && !isAnalyzing && (
-                <div className="h-full animate-fade-in">
+                <div className="h-full animate-fade-in relative z-10">
                     {activeTab === 'scorecard' && <Scorecard score={reproScore} />}
                     {activeTab === 'issues' && <IssuesList issues={analysisResult.issues} summary={analysisResult.methods_patch_summary} critique={analysisResult.critique} isDemoMode={isDemoMode} />}
                     {activeTab === 'runbook' && (
